@@ -1,0 +1,1119 @@
+package com.armen_.customgehrinplugin;
+
+import net.md_5.bungee.api.ChatMessageType;
+import org.apache.commons.lang.ObjectUtils;
+import org.bukkit.*;
+import org.bukkit.Color;
+import org.bukkit.attribute.AttributeModifier;
+import org.bukkit.block.Block;
+import org.bukkit.block.BrewingStand;
+import org.bukkit.block.Furnace;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.Directional;
+import org.bukkit.command.Command;
+import org.bukkit.command.CommandExecutor;
+import org.bukkit.command.CommandSender;
+import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.*;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.block.*;
+import org.bukkit.event.enchantment.PrepareItemEnchantEvent;
+import org.bukkit.event.inventory.FurnaceSmeltEvent;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import org.bukkit.event.entity.EntityBreedEvent;
+import org.bukkit.event.inventory.*;
+import org.bukkit.event.player.*;
+import org.bukkit.event.world.StructureGrowEvent;
+import org.bukkit.inventory.*;
+import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
+import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.event.Listener;
+import org.bukkit.potion.PotionData;
+import org.bukkit.potion.PotionEffect;
+import org.bukkit.potion.PotionEffectType;
+import org.bukkit.potion.PotionType;
+import org.bukkit.scoreboard.Scoreboard;
+import org.bukkit.scoreboard.ScoreboardManager;
+
+import java.awt.*;
+import java.io.File;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.UUID;
+
+public final class CustomGehrinPlugin extends JavaPlugin implements Listener, CommandExecutor {
+    FileConfiguration config;
+    ConfigurationSection profession_list;
+    ConfigurationSection skill_item_list;
+    ConfigurationSection crop_list;
+    ConfigurationSection branch_list;
+    ConfigurationSection customcooknames;
+    ConfigurationSection animal_list;
+    List<String> uncraftable_list;
+    List<String> cookable_list;
+    File data_folder;
+    String[] months = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+    double world_border_size = 24576;
+    int spawn_z = 10000;
+    HashMap<String, Boolean> exp_db_list;
+
+    @Override
+    public void onEnable() {
+        exp_db_list = new HashMap<String, Boolean>();
+
+        data_folder = new File(this.getDataFolder()+File.separator+"players");
+        if (!data_folder.exists()){
+            data_folder.mkdirs();
+        }
+
+        config = this.getConfig();
+        saveDefaultConfig();
+        animal_list = config.getConfigurationSection("Animals");
+        profession_list = config.getConfigurationSection("Professions");
+        skill_item_list = config.getConfigurationSection("Skills");
+        crop_list = config.getConfigurationSection("Crops");
+        uncraftable_list = config.getStringList("Uncraftable");
+        cookable_list = config.getStringList("Cookable");
+        customcooknames = config.getConfigurationSection("CustomCookNames");
+        getServer().getPluginManager().registerEvents(this, this);
+        this.getCommand("date").setExecutor(this);
+        this.getCommand("temperature").setExecutor(this);
+        this.getCommand("addskill").setExecutor(this);
+        this.getCommand("stats").setExecutor(this);
+
+        //Saddle Recipe
+        ShapedRecipe saddle_recipe = new ShapedRecipe(new NamespacedKey(this, "saddle"), new ItemStack(Material.SADDLE));
+        saddle_recipe.shape("LLL", "TNT");
+        saddle_recipe.setIngredient('L', new ItemStack(Material.LEATHER));
+        saddle_recipe.setIngredient('N', new ItemStack(Material.NETHERITE_INGOT));
+        saddle_recipe.setIngredient('T', new ItemStack(Material.TRIPWIRE_HOOK));
+        Bukkit.addRecipe(saddle_recipe);
+        //Name tag Recipe
+        ShapedRecipe name_tag = new ShapedRecipe(new NamespacedKey(this, "name_tag"), new ItemStack(Material.NAME_TAG));
+        name_tag.shape(" S ", " RI");
+        name_tag.setIngredient('S', new ItemStack(Material.STRING));
+        name_tag.setIngredient('I', new ItemStack(Material.INK_SAC));
+        name_tag.setIngredient('R', new ItemStack(Material.RABBIT_HIDE));
+        Bukkit.addRecipe(name_tag);
+        //Chainmail helmet reicpe
+        ItemStack helm = new ItemStack(Material.CHAINMAIL_HELMET);
+        ShapedRecipe chain_helm = new ShapedRecipe(new NamespacedKey(this, "chainmail_helmet"), helm);
+        chain_helm.shape("CCC", "C C");
+        chain_helm.setIngredient('C', new ItemStack(Material.CHAIN));
+        Bukkit.addRecipe(chain_helm);
+        //Chainmail chestplate reicpe
+        ItemStack chest = new ItemStack(Material.CHAINMAIL_CHESTPLATE);
+        ShapedRecipe chain_chest = new ShapedRecipe(new NamespacedKey(this, "chainmail_chestplate"), chest);
+        chain_chest.shape("C C", "CCC", "CCC");
+        chain_chest.setIngredient('C', new ItemStack(Material.CHAIN));
+        Bukkit.addRecipe(chain_chest);
+        //Chainmail leggings recipe
+        ItemStack legs = new ItemStack(Material.CHAINMAIL_LEGGINGS);
+        ShapedRecipe chain_legs = new ShapedRecipe(new NamespacedKey(this, "chainmail_leggings"), legs);
+        chain_legs.shape("CCC", "C C", "C C");
+        chain_legs.setIngredient('C', new ItemStack(Material.CHAIN));
+        Bukkit.addRecipe(chain_legs);
+        //Chainmail boots    reicpe
+        ItemStack boots = new ItemStack(Material.CHAINMAIL_BOOTS);
+        ShapedRecipe chain_boots = new ShapedRecipe(new NamespacedKey(this, "chainmail_boots"), boots);
+        chain_boots.shape("C C", "C C");
+        chain_boots.setIngredient('C', new ItemStack(Material.CHAIN));
+        Bukkit.addRecipe(chain_boots);
+        //Dough
+        ItemStack dough = new ItemStack(Material.WHITE_DYE);
+        ItemMeta dough_meta = dough.getItemMeta();
+        if (dough instanceof Nameable){
+            Nameable dough_name = (Nameable) dough;
+            dough_name.setCustomName("Dough");
+        }
+        else{
+            dough_meta.setDisplayName("Dough");
+        }
+        dough.setItemMeta(dough_meta);
+        ShapedRecipe dough_recipe = new ShapedRecipe(new NamespacedKey(this, "dough"), dough);
+        dough_recipe.shape(" E ", "WWW");
+        dough_recipe.setIngredient('W', new ItemStack(Material.WHEAT));
+        dough_recipe.setIngredient('E', new ItemStack(Material.EGG));
+        Bukkit.addRecipe(dough_recipe);
+        getServer().addRecipe(new FurnaceRecipe(new NamespacedKey(this, "bread"), new ItemStack(Material.BREAD), Material.WHITE_DYE, 6, 300));
+        //Sweet Berry Wine
+        ItemStack wine = new ItemStack(Material.POTION);
+        PotionMeta wine_meta = (PotionMeta) wine.getItemMeta();
+        wine_meta.setDisplayName("Sweet Berry Wine");
+        wine_meta.addCustomEffect(new PotionEffect(PotionEffectType.CONFUSION, 3600, 0, false, false), false);
+        wine_meta.addCustomEffect(new PotionEffect(PotionEffectType.SLOW, 3600, 0, false, false), false);
+        wine_meta.setColor(Color.fromRGB(139, 0, 0));
+        List<String> wine_lore = new ArrayList<String>();
+        wine_lore.add("Yummy wine");
+        wine_meta.setLore(wine_lore);
+        wine_meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
+        wine.setItemMeta(wine_meta);
+        ShapedRecipe wine_recipe = new ShapedRecipe(new NamespacedKey(this, "wine"), wine);
+        wine_recipe.shape("SSS", "SWS","SSS");
+        wine_recipe.setIngredient('S', new ItemStack(Material.SWEET_BERRIES));
+        ItemStack bottle = new ItemStack(Material.POTION, 1);
+        ItemMeta meta = bottle.getItemMeta();
+        PotionMeta pmeta = (PotionMeta) meta;
+        PotionData pdata = new PotionData(PotionType.WATER);
+        pmeta.setBasePotionData(pdata);
+        bottle.setItemMeta(meta);
+        wine_recipe.setIngredient('W', bottle);
+        Bukkit.addRecipe(wine_recipe);
+        //beer
+        ItemStack beer = new ItemStack(Material.POTION);
+        PotionMeta beer_meta = (PotionMeta) beer.getItemMeta();
+        beer_meta.setDisplayName("Beer");
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.CONFUSION, 3600, 1, false, false), false);
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.SLOW, 3600, 1, false, false), false);
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 3600, 0, false, false), false);
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.INCREASE_DAMAGE, 3600, 0, false, false), false);
+        beer_meta.setColor(Color.fromRGB(200, 140, 64));
+        List<String> beer_lore = new ArrayList<String>();
+        beer_lore.add("\"Do you like beer, senator? -Brett Kavanaugh\"");
+        beer_meta.setLore(beer_lore);
+        beer_meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
+        beer.setItemMeta(beer_meta);
+
+        ShapedRecipe beer_recipe = new ShapedRecipe(new NamespacedKey(this, "beer"), beer);
+        beer_recipe.shape("SSS", "SWS","SSS");
+        beer_recipe.setIngredient('S', new ItemStack(Material.WHEAT));
+        beer_recipe.setIngredient('W', bottle);
+        Bukkit.addRecipe(beer_recipe);
+        //vodka
+        ItemStack vodka = new ItemStack(Material.POTION);
+        PotionMeta vodka_meta = (PotionMeta) vodka.getItemMeta();
+        vodka_meta.setDisplayName("Vodka");
+        vodka_meta.addCustomEffect(new PotionEffect(PotionEffectType.CONFUSION, 3600, 2, false, false), false);
+        vodka_meta.addCustomEffect(new PotionEffect(PotionEffectType.SLOW, 3600, 2, false, false), false);
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.INCREASE_DAMAGE, 3600, 1, false, false), false);
+        beer_meta.addCustomEffect(new PotionEffect(PotionEffectType.DAMAGE_RESISTANCE, 3600, 1, false, false), false);
+        vodka_meta.setColor(Color.fromRGB(223, 229, 232));
+        List<String> vodka_lore = new ArrayList<String>();
+        vodka_lore.add("120 proof");
+        vodka_meta.setLore(vodka_lore);
+        vodka_meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
+        vodka.setItemMeta(vodka_meta);
+        ShapedRecipe vodka_recipe = new ShapedRecipe(new NamespacedKey(this, "vodka"), vodka);
+        vodka_recipe.shape("PPP", "PWS","SSS");
+        vodka_recipe.setIngredient('P', new ItemStack(Material.POTATO));
+        vodka_recipe.setIngredient('S', new ItemStack(Material.WHEAT));
+        vodka_recipe.setIngredient('W', bottle);
+        Bukkit.addRecipe(vodka_recipe);
+        //coffee
+        ItemStack coffee = new ItemStack(Material.POTION);
+        PotionMeta coffee_meta = (PotionMeta) coffee.getItemMeta();
+        coffee_meta.setDisplayName("Coffee");
+        coffee_meta.addCustomEffect(new PotionEffect(PotionEffectType.FAST_DIGGING, 3600, 1, false, false), false);
+        coffee_meta.addCustomEffect(new PotionEffect(PotionEffectType.SPEED, 3600, 0, false, false), false);
+        coffee_meta.setColor(Color.fromRGB(54, 37, 1));
+        List<String> coffee_lore = new ArrayList<String>();
+        coffee_lore.add("Faster faster faster");
+        coffee_meta.setLore(coffee_lore);
+        coffee_meta.addItemFlags(ItemFlag.HIDE_POTION_EFFECTS);
+        coffee.setItemMeta(coffee_meta);
+        ShapedRecipe coffee_recipe = new ShapedRecipe(new NamespacedKey(this, "coffee"), coffee);
+        coffee_recipe.shape("CCC", "CWC","CCC");
+        coffee_recipe.setIngredient('C', new ItemStack(Material.COCOA_BEANS));
+        coffee_recipe.setIngredient('W', bottle);
+        Bukkit.addRecipe(coffee_recipe);
+        //Sweet Berry Dough
+        ItemStack s_dough = new ItemStack(Material.RED_DYE);
+        ItemMeta s_dough_meta = s_dough.getItemMeta();
+        s_dough_meta.setDisplayName("Sweet Dough");
+        s_dough.setItemMeta(s_dough_meta);
+        ShapedRecipe s_dough_recipe = new ShapedRecipe(new NamespacedKey(this, "sweet_dough"), s_dough);
+        s_dough_recipe.shape("SSS", "SDS", "SSS");
+        s_dough_recipe.setIngredient('D', dough);
+        s_dough_recipe.setIngredient('S', new ItemStack(Material.SWEET_BERRIES));
+        Bukkit.addRecipe(s_dough_recipe);
+        //Sweet Bread
+        getServer().addRecipe(new FurnaceRecipe(new NamespacedKey(this, "sweet_bread"), new ItemStack(Material.BREAD), Material.RED_DYE, 6, 300));
+    }
+
+    public File getPlayerDataFile(String player){
+        File[] file_list = data_folder.listFiles(new FilenameFilter()
+        {
+            public boolean accept(File dir, String name)
+            {
+                return name.startsWith(player) && name.endsWith(".yml");
+            }
+        });
+        if (file_list.length > 0){
+            return file_list[0];
+        }
+        else{
+            return null;
+        }
+    }
+
+    public FileConfiguration getPlayerDataConfig(String player){
+        return YamlConfiguration.loadConfiguration(getPlayerDataFile(player));
+    }
+
+    public FileConfiguration getPlayerDataConfig(File player_file){
+        return YamlConfiguration.loadConfiguration(player_file);
+    }
+
+    public FileConfiguration getConfigurationREAL(){
+        File[] file_list = data_folder.listFiles(new FilenameFilter()
+        {
+            public boolean accept(File dir, String name)
+            {
+                return name.startsWith("config") && name.endsWith(".yml");
+            }
+        });
+        if (file_list.length > 0){
+            return YamlConfiguration.loadConfiguration(file_list[0]);
+        }
+        return null;
+    }
+
+    public String addUnderscores(String str){
+        String ret = "";
+        for (int i = 0; i < str.length(); i++){
+            char c = str.charAt(i);
+            if (c == ' '){
+                ret+="_";
+            }
+            else{
+                ret+=c;
+            }
+        }
+        return ret;
+    }
+
+    public int hasSkill(String skill_name, String player) {
+        List<Integer> skill_info = skill_item_list.getIntegerList(skill_name);
+        int skill_level = getPlayerDataConfig(player).getInt("Profession"); //Int(skill_info.get(0)+"");
+        int level_req = skill_info.get(1);
+       //if (level_req < 13 && level_req > 3 && skill_level > 13){
+            //return 0;
+       //}
+       //else
+        if (skill_level == level_req) {
+            return skill_level;
+        }
+        return 0;
+    }
+
+    public int getTotalDays(World world){
+        return (int) ((world.getFullTime()/24000)+1);
+    }
+
+    public int getTotalYears(World world){
+        return (getTotalDays(world)-1)/365;
+    }
+
+    public double getLatitude(Block block){
+        return Math.round((block.getZ()+spawn_z)*4500 / (world_border_size))/100;
+        //return (Math.round((-(((block.getZ() - (double) spawn_z) / world_border_size) * 180)*100))/100.0)*(0.9);
+    }
+
+    public String getDate(World world){
+        int total_days_in_year = getTotalDays(world)%365;
+        int month = 0;
+        for (int i = 1; i <= 12; i++){
+            int days_in_month;
+            if (i == 2){
+                days_in_month = 28;
+            }
+            else{
+                days_in_month = 30+(i%2);
+            }
+            if (total_days_in_year <= days_in_month){
+                month = i-1;
+                break;
+            }
+            else{
+                total_days_in_year -= days_in_month;
+            }
+        }
+        int year = 1+getTotalYears(world);
+        return ChatColor.GOLD+(ChatColor.BOLD+(total_days_in_year+" "+months[month]+" "+year));
+    }
+
+    public double getBlockTemperature(Block block) {
+        if (block.getWorld().getEnvironment().name().equals("NETHER")) {
+            return 200;
+        }
+        double full_time = block.getWorld().getFullTime();
+        double light_level = 7.5;
+        light_level+=block.getLightFromBlocks()/5.0;
+        double altitude = block.getY();
+        double latitude = getLatitude(block);
+        double t = (full_time % 8760000) / 730000;
+        double temp = (((20 + 64*Math.abs(Math.cos((latitude*(3.141526/180))))) - (altitude * 0.15) + ((-8 * t)*(Math.pow(1.37, t - 12) - 1)) + Math.pow(light_level, 1.05))) + config.getDouble("GlobalWarmingFactor");
+        temp *= 100;
+        temp = Math.round(temp);
+        return temp/100;
+    }
+
+    public int get_level(double xp){
+        //if (xp < 1){
+        //    return 0;
+        //}
+       // else if (xp > get_exp_req(5)){
+           // return (int) ((xp/50000) + 5);
+       // }
+        return 0;
+    }
+    /*
+        public int get_exp_req(int level){
+            //if (level >= 6){
+            //    return 50000*(level-5);
+            //}
+            return (int) (Math.exp(2*level));
+        }
+
+        public int get_skill_points_used(FileConfiguration player_section){
+            int points = 0;
+            for (int i = 1; i <= 6; i++){
+                points += player_section.getInt(i+"");
+            }
+            points += player_section.getInt("SkillPoints");
+            return points;
+        }
+
+
+        int db_wait_list = 1;
+        public void add_experience(Player player, double exp) {
+            Bukkit.getScheduler().runTask(this, () ->{
+                int wait_time = db_wait_list;
+                while (exp_db_list.get(player.getName())){
+                    try{
+                        if (exp_db_list.get(player.getName())){
+                            Thread.sleep(wait_time);
+                        }
+                    } catch (InterruptedException e) {
+
+                    }
+                }
+                exp_db_list.put(player.getName(), true);
+                db_wait_list++;
+                FileConfiguration player_section = getPlayerDataConfig(player.getName());
+                double old_exp = player_section.getDouble("Experience");
+                double new_exp = exp + old_exp;
+                int level = get_level(old_exp);
+                player_section.set("Experience", new_exp);
+                int exp_requirement = get_exp_req(level+1);
+                if (new_exp >= exp_requirement){
+                    int skill_points_used = get_skill_points_used(player_section);
+                    if (get_level(new_exp) - skill_points_used == 1){
+                        if (level < 12){
+                            player_section.set("SkillPoints", player_section.getInt("SkillPoints")+1);
+                        }
+                    }
+                }
+                saveData(getPlayerDataFile(player.getName()), player_section);
+                exp_db_list.put(player.getName(), false);
+                db_wait_list--;
+            });
+        }*/
+    @Override
+    public boolean onCommand(CommandSender sender, Command command, String label, String[] args){
+        if (sender instanceof Player) {
+            Player player = (Player) sender;
+            if (command.getName().equals("date")){
+                player.sendMessage(getDate(player.getWorld()));
+            }
+            /*
+            else if (command.getName().equals("checkrequirement")){
+                String item_name = "";
+                for (String x : args){
+                    item_name += x.toUpperCase()+"_";
+                }
+                if (item_name.length() < 3){ return false; }
+                item_name = item_name.substring(0, item_name.length()-1);
+                if (skill_item_list.contains(item_name) || skill_item_list.contains("F_"+item_name) || skill_item_list.contains("B_"+item_name)){
+                    List<Integer> info = skill_item_list.getIntegerList(item_name);
+                    String prof_name = profession_list.getString(""+info.get(0));
+                    int lvl = info.get(1);
+                    if (lvl > 10){
+                        lvl-=10;
+                        prof_name+=" ("+branch_list.get(info.get(0)+"b")+" Branch)";
+                    }
+                    player.sendMessage(ChatColor.DARK_RED + (ChatColor.BOLD + "Need at least "+prof_name+" level "+lvl));
+                }
+                else{
+                    player.sendMessage(ChatColor.DARK_RED + (ChatColor.BOLD + "This item doesn't exist or isn't in the skill tree."));
+                }
+            }*/
+            else if (command.getName().equals("temperature")){
+                Block target = player.getPlayer().getLocation().getBlock();
+                if (target != null){
+                    double temp = getBlockTemperature(target);
+                    String msg = temp+(ChatColor.BOLD+"°F");
+                    if (temp > 90){
+                        msg = ChatColor.RED+msg;
+                    }
+                    else if (temp > 80){
+                        msg = ChatColor.GOLD+msg;
+                    }
+                   else if (temp > 70){
+                        msg = ChatColor.YELLOW+msg;
+                    }
+                   else if (temp > 50){
+                       msg = ChatColor.GRAY+msg;
+                    }
+                   else if (temp > 30){
+                       msg = ChatColor.BLUE+msg;
+                    }
+                    player.sendMessage(msg);
+                }
+                else{
+                    player.sendMessage(ChatColor.DARK_RED + (ChatColor.BOLD + "No block detected"));
+                }
+                return true;
+            }
+            else if (command.getName().equals("profession")){
+                FileConfiguration player_section = getPlayerDataConfig(player.getName());
+               // int exp = player_section.getInt("Experience");
+                //int level = get_level(exp);
+                /*
+                String msg = (get_exp_req(level+1)+(ChatColor.YELLOW+"\nSkill Points: ")+player_section.getInt("SkillPoints")+(ChatColor.GOLD+(ChatColor.BOLD+"\n\nSKILLS\n"));
+                for (String key : profession_list.getKeys(false)){
+                    int skill_levle = player_section.getInt(key);
+                    String profession = profession_list.getString(key);
+                    if (skill_levle>=14){
+                        skill_levle-=10;
+                        profession += " ("+branch_list.get(key+"b")+")";
+                    }
+                    else if (skill_levle >= 4){
+                        profession += " ("+branch_list.get(key+"a")+")";
+                    }
+                        msg += (ChatColor.YELLOW+profession+": ")+skill_levle+"\n";
+                }*/
+
+                player.sendMessage(ChatColor.YELLOW+"Profession: "+profession_list.getString(""+player_section.getInt("Profession")));
+                return true;
+            }
+            else if (command.getName().equals("setprofession")){
+                if (args.length == 0){
+                    String msg = "";
+                    for (String key : profession_list.getKeys(false)){
+                         msg += key+": "+profession_list.getString(key)+"\n";
+                    }
+                    player.sendMessage("Profession list:\n"+msg);
+                }
+                else {
+                    int desired_profession = Integer.parseInt(args[0]);
+                    if (desired_profession < 1 || desired_profession > profession_list.getKeys(false).size()){
+                        String msg = "";
+                        for (String key : profession_list.getKeys(false)){
+                            msg += key+": "+profession_list.getString(key)+"\n";
+                        }
+                        player.sendMessage("Profession list:\n"+msg);
+                    }
+                    else{
+                        FileConfiguration player_section = getPlayerDataConfig(player.getName());
+                        player_section.set("Profession", desired_profession);
+                        saveData(getPlayerDataFile(player.getName()), player_section);
+                    }
+
+                }
+            }
+            else if (command.getName().equals("latitude")){
+                player.sendMessage(getLatitude(player.getLocation().getBlock())+"°");
+                return true;
+            }
+            /*
+            else if (command.getName().equals("addskill")){
+                if (args.length == 0){
+                    String msg = ChatColor.BOLD+(ChatColor.DARK_RED+"Missing argument. ex: \"/addskill 3\" \n");
+                    for (String key : profession_list.getKeys(false)){
+                        msg += key+": "+profession_list.get(key)+"\n";
+                    }
+                    player.sendMessage(msg);
+                }
+                else {
+                    if (profession_list.contains(args[0])){
+                        FileConfiguration player_section = getPlayerDataConfig(player.getName());
+                        if (player_section.getInt("SkillPoints") <= 0){
+                            player_section.set("SkillPoints", 0);
+                            player.sendMessage(ChatColor.BOLD+(ChatColor.DARK_RED+"Not enough skill points"));
+                        }
+                        else{
+                            int skill_level =(player_section.getInt(args[0]));
+                            int increment = 1;
+                            if (skill_level == 3){
+                                if (args.length > 1){
+                                    String x = args[1];
+                                    if (branch_list.contains(args[0]+"a")){
+                                        if (x.equals("b") || x.equals("a")){
+                                            if (x.equals("b")){
+                                                increment = 11;
+                                            }
+                                        }
+                                        else {
+                                            player.sendMessage(ChatColor.BOLD+(ChatColor.DARK_RED+"Not a valid skill branch"));
+                                            return false;
+                                        }
+                                    }
+                                    else{
+                                        player.sendMessage(ChatColor.BOLD+(ChatColor.DARK_RED+"This profession does not have a branch."));
+                                        return false;
+                                    }
+
+                                }
+                                else{
+                                    player.sendMessage(ChatColor.BOLD+(ChatColor.DARK_GREEN+"\nBranching point: pick a branch. ex: \"/addskill [job number] [branch letter]\", \"addskill 2 b\""));
+                                    String msg = "";
+                                    for (String key : branch_list.getKeys(false)){
+                                        if (args[0].equals(key.charAt(0)+"")){
+                                            msg += (ChatColor.BOLD+""+key.charAt(1)+": ")+branch_list.getString(key)+"\n";
+                                        }
+                                    }
+                                    player.sendMessage(msg);
+                                    return false;
+                                }
+                            }
+                            player_section.set(args[0], skill_level+increment);
+                            player_section.set("SkillPoints", ((int) (player_section.get("SkillPoints")))-1);
+                            player.sendMessage(ChatColor.GREEN+"Successfully upgraded skill");
+                            saveData(getPlayerDataFile(player.getName()), player_section);
+                            return true;
+                        }
+                    }
+                    else {
+                        player.sendMessage(ChatColor.BOLD+(ChatColor.DARK_RED+"Not a valid skill"));
+                    }
+                }
+
+
+            }
+
+            else if (command.getName().equals("setrequirement")){
+                List <Integer> list = new ArrayList<Integer>();
+                list.add(0, Integer.parseInt(args[1]));
+                list.add(1, Integer.parseInt(args[2]));
+                skill_item_list.set(args[0], list);
+                saveConfig();
+                config = getConfig();
+            }
+            */
+            else if (command.getName().equals("getwarmingfactor")){
+                player.sendMessage(""+config.getDouble("GlobalWarmingFactor"));
+            }
+            else if (command.getName().equals("addwarmingfactor")){
+                config.set("GlobalWarmingFactor", config.getDouble("GlobalWarmingFactor")+Double.parseDouble(args[0]));
+            }
+            /*else if (command.getName().equals("addexp")){
+                FileConfiguration player_section = getPlayerDataConfig(args[0]);
+                player_section.set("Experience", player_section.getDouble("Experience")+Integer.parseInt(args[1]));
+                saveData(getPlayerDataFile(args[0]), player_section);
+            }*/
+        }
+
+        return false;
+    }
+
+    @EventHandler
+    public void onStructureGrow(StructureGrowEvent sge){
+        if (!(sge.getSpecies().name().equals("BROWN_MUSHROOM") || sge.getSpecies().name().equals("RED_MUSHROOM") || sge.getSpecies().name().equals("CRIMSON_FUNGUS") || sge.getSpecies().name().equals("WARPED_FUNGUS"))){
+            config.set("GlobalWarmingFactor", Math.max(0, config.getDouble("GlobalWarmingFactor")-(0.00025)));
+        }
+    }
+
+    @EventHandler
+    public void onCropGrow(BlockGrowEvent bge){
+        Block block = bge.getBlock();
+
+        String name = block.getType().name().toUpperCase();
+        if (name.equals("AIR")){
+            Location l = block.getLocation();
+            Bukkit.getScheduler().runTask(this, () -> {
+                Block new_block = l.getBlock();
+                String new_name = new_block.getType().name().toUpperCase();
+                if (crop_list.contains(new_name)){
+                    double temperature = getBlockTemperature(new_block);
+                    List<Double> interval = crop_list.getDoubleList(new_block.getType().name());
+                    if (temperature < interval.get(0)-0.5){
+                        new_block.setType(Material.AIR);
+                    }
+                    else if (temperature > interval.get(1)+0.5){
+                        new_block.setType(Material.AIR);
+                    }
+                }
+            });
+        }
+        else{
+            if (block.getLightFromSky() == 0){
+                if (Math.random() < 0.8){
+                    bge.setCancelled(true);
+                    return;
+                }
+            }
+            if (crop_list.contains(name)){
+                double temperature = getBlockTemperature(block);
+                List<Double> interval = crop_list.getDoubleList(block.getType().name());
+                if (temperature < interval.get(0)-0.5){
+                    bge.setCancelled(true);
+                    if (temperature < 25 && Math.random() > 0.6){
+                        block.setType(Material.ICE);
+                    }
+                }
+                else if (temperature > interval.get(1)+0.5){
+                    bge.setCancelled(true);
+                    if (temperature > 89 && Math.random() > 0.6){
+                        block.setType(Material.FIRE);
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onSmelt(FurnaceSmeltEvent fse){
+        ItemStack result = fse.getResult();
+        ItemStack input = fse.getSource();
+        ItemMeta input_meta = input.getItemMeta();
+        if (cookable_list.contains(input.getType().name())){
+            if (input.getItemMeta() != null){
+                if (input_meta.getDisplayName() != null){
+                    String disp = addUnderscores(input_meta.getDisplayName());
+                    if (customcooknames.contains(disp)){
+                        String custom_name = customcooknames.getString(disp);
+                        ItemMeta result_meta = result.getItemMeta();
+                        result_meta.setDisplayName(custom_name);
+                        result.setItemMeta(result_meta);
+                        fse.setResult(result);
+                    }
+                    if (skill_item_list.contains("COOK_"+disp)){
+                        return;
+                    }
+                }
+                fse.setResult(new ItemStack(Material.AIR));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEat(PlayerItemConsumeEvent pice){
+        ItemStack consumed = pice.getItem();
+        Player player = pice.getPlayer();
+        if (consumed.hasItemMeta()){
+            String name = addUnderscores(consumed.getItemMeta().getDisplayName());
+            if (skill_item_list.contains(name)){
+                List<Integer> list = skill_item_list.getIntegerList(name);
+                if (list.size() > 2){
+                    player.setFoodLevel(player.getFoodLevel()+list.get(2));
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onEntityInteractEvent(PlayerInteractEntityEvent piaee){
+        Player player = piaee.getPlayer();
+        Entity entity = piaee.getRightClicked();
+        if (entity.getType().equals(EntityType.HORSE)){
+            Horse horse = (Horse) entity;
+            if (horse.isTamed() && player.getInventory().getItemInMainHand().equals(new ItemStack(Material.AIR))){
+                return;
+            }
+        }
+        String entity_name = entity.getName().toUpperCase();
+        if (!player.getInventory().getItemInMainHand().equals(new ItemStack(Material.LEAD))){
+            if (skill_item_list.contains(entity_name)){
+                int skill_lvl = hasSkill(entity_name, player.getName());
+                if (skill_lvl == 0){
+                    piaee.setCancelled(true);
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAnvilCreate(PrepareAnvilEvent pae){
+        Player player = (Player) pae.getViewers().get(0);
+        String player_name = player.getName();
+        ItemStack item = pae.getInventory().getSecondItem();
+        if (item == null){ return; }
+        int has_skill;
+        if (item.getType().equals(Material.ENCHANTED_BOOK)){
+            has_skill = hasSkill("E_BOOK", player_name);
+        }
+        else{
+            has_skill = hasSkill("ANVIL", player_name);
+        }
+        if (has_skill == 0){
+            pae.getInventory().setResult(new ItemStack(Material.AIR));
+        }
+    }
+
+    @EventHandler
+    public void onSmithing(PrepareSmithingEvent pse){
+        Player player = (Player) pse.getViewers().get(0);
+        String player_name = player.getName();
+        int has_skill = hasSkill("SMITHING_TABLE", player_name);
+        if (has_skill > 0){
+            //add_experience(player, has_skill);
+        }
+        else{
+            pse.getInventory().setResult(new ItemStack(Material.AIR));
+        }
+    }
+
+    @EventHandler
+    public void onItemEnchantment(PrepareItemEnchantEvent piee){
+        Player player = piee.getEnchanter();
+        int enchantment_level = piee.getEnchantmentBonus();
+        String x;
+        if (enchantment_level <= 5){
+            x = "E_5";
+        }
+        else if (enchantment_level <= 10){
+            x = "E_10";
+        }
+        else{
+            x = "E_15";
+        }
+        int skill_lvl = hasSkill(x, player.getName());
+        if (skill_lvl > 0){
+           // add_experience(player, skill_lvl);
+        }
+        else{
+            piee.setCancelled(true);
+        }
+    }
+
+    boolean furnace_click_db = false;
+    @EventHandler (priority = EventPriority.HIGHEST)
+    public void onPlayerClick(InventoryClickEvent ice){
+        Inventory inventory = ice.getInventory();
+        if (inventory instanceof CraftingInventory){
+            if (ice.getSlot() == 1 && ice.getCurrentItem() != null){
+                if (ice.getCurrentItem().getType().equals(Material.AIR)){return;}
+                String name = ice.getCurrentItem().getType().name();
+                if (skill_item_list.contains(name)){
+                    int q = skill_item_list.getIntegerList(name).get(1);
+                    if (q > 10){
+                        q -= 10;
+                    }
+                   // add_experience((Player) ice.getWhoClicked(), Math.pow(Math.round(1.25*q), 2));
+                }
+            }
+        }
+        else if (inventory instanceof FurnaceInventory){
+            if (ice.getSlot() == 2 && ice.getCurrentItem() != null){
+                if (ice.getCurrentItem().getType().equals(Material.AIR)){return;}
+                String name = ice.getCurrentItem().getType().name();
+                if (skill_item_list.contains(name)){
+                    int q = skill_item_list.getIntegerList(name).get(1);
+                    if (q > 10){
+                        q -= 10;
+                    }
+                    //add_experience((Player) ice.getWhoClicked(), Math.pow(Math.round(1.25*q), 2));
+                }
+            }
+        }
+        else if (inventory instanceof SmithingInventory){
+            if (ice.getSlot() == 2 && ice.getCurrentItem() != null){
+                if (ice.getCurrentItem().getType().equals(Material.AIR)){return;}
+                String name = ice.getCurrentItem().getType().name();
+                if (skill_item_list.contains(name)){
+                    int q = skill_item_list.getIntegerList(name).get(1);
+                    if (q > 10){
+                        q -= 10;
+                    }
+                    //add_experience((Player) ice.getWhoClicked(), Math.pow(Math.round(1.25*q), 2));
+                }
+            }
+        }
+        else if (inventory instanceof BrewerInventory){
+            ItemStack ingredient = ice.getCursor();
+            if (ingredient != null && !ingredient.equals(Material.AIR)){
+                if (ice.getSlot()==3){
+                    String ing_name = ingredient.getType().name();
+                    if (skill_item_list.contains("B_"+ing_name)){
+                        Player player = (Player) ice.getWhoClicked();
+                        if (hasSkill(ing_name, ice.getWhoClicked().getName()) == 0){
+                            ice.setCancelled(true);
+                        }
+                        else{
+                            int q = skill_item_list.getIntegerList(ing_name).get(1);
+                            if (q > 10){
+                                q -= 10;
+                            }
+                            //add_experience(player, Math.pow(Math.round(1.25*q), 2));
+                        }
+                    }
+                }
+            }
+        }
+        else if (inventory instanceof StonecutterInventory){
+            StonecutterInventory sci = ((StonecutterInventory) inventory);
+            ItemStack result = sci.getResult();
+            if (result != null){
+                if (ice.getSlot() == 1){
+                    if (skill_item_list.contains(result.getType().name())){
+                        int has_skill = hasSkill(result.getType().name(), ice.getWhoClicked().getName());
+                        if (has_skill == 0){
+                            ice.setCancelled(true);
+                        }
+                        else{
+                           // add_experience((Player)ice.getWhoClicked(), has_skill*result.getAmount()*2);
+                        }
+                    }
+                }
+            }
+        }
+        else if (inventory instanceof AnvilInventory){
+            if (ice.getSlot() == 2 && ice.getCurrentItem() != null){
+                if (ice.getCurrentItem().getType().equals(Material.AIR)){return;}
+               String name = ice.getCurrentItem().getType().name();
+               if (skill_item_list.contains(name)){
+                   int q = skill_item_list.getIntegerList(name).get(1);
+                   if (q > 10){
+                       q -= 10;
+                   }
+                  // add_experience((Player) ice.getWhoClicked(), Math.pow(Math.round(1.25*q), 2));
+               }
+           }
+        }
+    }
+
+    @EventHandler
+    public void onBlockSpread(BlockSpreadEvent bse){
+        Block block = bse.getBlock();
+        if (crop_list.contains(block.getType().name())){
+            double temperature = getBlockTemperature(block);
+            List<Double> interval = crop_list.getDoubleList(block.getType().name());
+            if (temperature < interval.get(0) || temperature > interval.get(1)){
+                bse.setCancelled(true);
+                if (block.getType().equals(Material.AIR)){
+                    Bukkit.getScheduler().runTask(this, () -> {
+                       block.setType(Material.AIR);
+                    });
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBlockBreak(BlockBreakEvent bbe){
+        Block b = bbe.getBlock();
+        String block = b.getType().name();
+        if (skill_item_list.contains("F_"+block)){
+            if (block.equals("SUGAR_CANE")){return;}
+            Player player = bbe.getPlayer();
+            int has_skill = hasSkill("F_"+block, player.getName());
+            if (has_skill > 0){
+                //add_experience(player, has_skill/4.0);
+            }
+        }
+        else if (b.getType().equals(Material.STONE)){
+            if (Math.random() < 0.015625){
+                b.getWorld().dropItemNaturally(b.getLocation(), new ItemStack(Material.QUARTZ));
+            }
+        }
+    }
+
+    @EventHandler
+    public void onBlockPlace(BlockPlaceEvent bpe){
+        Player placer = bpe.getPlayer();
+        if (placer != null){
+            Block placed_block = bpe.getBlockPlaced();
+            Material placed = placed_block.getType();
+
+            if (placed.name().equals("SUGAR_CANE")){
+                double temperature = getBlockTemperature(bpe.getBlockAgainst());
+                List<Double> interval = crop_list.getDoubleList(placed.name());
+                if (temperature < interval.get(0)-0.5 || temperature > interval.get(1)+0.5){
+                    placed_block.setType(Material.AIR);
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onFurnaceBurn(FurnaceBurnEvent fbe){
+        String fuel = fbe.getFuel().getType().name();
+        if (fuel.equals("COAL") || fuel.equals("COAL_BLOCK") || fuel.equals("LAVA_BUCKET") || fuel.equals("BLAZE_ROD")){
+            //global warming
+            config.set("GlobalWarmingFactor", config.getDouble("GlobalWarmingFactor")+((double) fbe.getBurnTime())/40000000);
+        }
+        else if (fuel.equals("CHARCOAL")){
+            config.set("GlobalWarmingFactor", config.getDouble("GlobalWarmingFactor")+((double) fbe.getBurnTime())/30000000);
+        }
+    }
+/*
+    @EventHandler
+    public void onExpGain(PlayerExpChangeEvent pece){
+        //add_experience(pece.getPlayer(), pece.getAmount()/2);
+    }*/
+
+    @EventHandler
+    public void onItemCrafting(PrepareItemCraftEvent pice) {
+        CraftingInventory inventory = pice.getInventory();
+        ItemStack crafted_item = pice.getInventory().getResult();
+        if (crafted_item == null) { return; }
+        String name = crafted_item.getType().name();
+        if (uncraftable_list.contains(crafted_item.getType().name())){
+            inventory.setResult(new ItemStack(Material.AIR));
+        }
+        else{
+            if (crafted_item.hasItemMeta()){
+                if (crafted_item.getItemMeta().getDisplayName() != null){
+                    String display_name = addUnderscores(crafted_item.getItemMeta().getDisplayName());
+                    if (skill_item_list.contains(display_name)){
+                        name = display_name;
+                    }
+                }
+            }
+            if (skill_item_list.contains(name)){
+                if (pice.getViewers().size() > 0){
+                    Player plr = (Player) pice.getViewers().get(0);
+                    String player = plr.getName();
+                    int has_skill = hasSkill(name, player);
+                    if (has_skill > 0){
+                        //add_experience(plr, Math.pow(Math.round(1.25*has_skill), 2));
+                    }
+                    else{
+                        inventory.setResult(new ItemStack(Material.AIR));
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAnimalBreed(EntityBreedEvent ebe){
+        Entity animal = ebe.getMother();
+        String animal_name = animal.getName().toUpperCase();
+        if (animal_list.contains(animal_name)){
+            List<Integer> temperature_interval = animal_list.getIntegerList(animal_name);
+            double temp = getBlockTemperature(animal.getLocation().getBlock());
+            if (temperature_interval.get(0) > temp || temperature_interval.get(1) < temp){
+                ebe.setCancelled(true);
+                return;
+            }
+        }
+        Player player = ((Player) ebe.getBreeder());
+        Breedable breedable = (Breedable) animal;
+
+        if (skill_item_list.contains(animal_name)){
+            String player_name = player.getName();
+            int has_skill = hasSkill(animal_name, player_name);
+            if (has_skill > 0){
+                if (animal_name.equals("WOLF")){
+                    player.getWorld().dropItemNaturally(animal.getLocation(), new ItemStack(Material.WOLF_SPAWN_EGG,1));
+                    ((ExperienceOrb) player.getWorld().spawn(animal.getLocation(), ExperienceOrb.class)).setExperience(5);
+                   // add_experience(player, 5);
+                    ebe.setCancelled(true);
+                }
+                else if (animal_name.equals("CHICKEN")){
+                    player.getWorld().dropItemNaturally(animal.getLocation(), new ItemStack(Material.EGG, 1));
+                    ((ExperienceOrb) player.getWorld().spawn(animal.getLocation(), ExperienceOrb.class)).setExperience(1);
+                    //add_experience(player, 1);
+                    ebe.setCancelled(true);
+                }
+                else if (Math.random() > 0.05){
+                    ebe.setCancelled(true);
+                    if (Math.random() > 0.95){
+                        ItemStack miscarriage = new ItemStack(Material.ROTTEN_FLESH);
+                        ItemMeta miscarriage_meta = miscarriage.getItemMeta();
+                        miscarriage_meta.setDisplayName("Dead Fetus");
+                        List<String> miscarriage_lore = new ArrayList<String>();
+                        miscarriage_lore.add("Miscarriaged "+animal_name+" fetus");
+                        miscarriage_meta.setLore(miscarriage_lore);
+                        miscarriage.setItemMeta(miscarriage_meta);
+                        animal.getWorld().dropItemNaturally(animal.getLocation(), miscarriage);
+                    }
+                }
+            }
+            else{
+                ebe.setCancelled(true);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onAnimalSpawn(CreatureSpawnEvent cse){
+        if (cse.getSpawnReason().name().equals("SPAWNER_EGG") && cse.getEntityType().name().equalsIgnoreCase("WOLF")){
+            Tameable wolf = (Tameable) cse.getEntity();
+            wolf.setBaby();
+            Player closest = null;
+            double smallest_distance = 0;
+            for(Player p : wolf.getWorld().getPlayers()){
+                double distance = p.getLocation().distance(wolf.getLocation());;
+                if (closest == null){
+                    smallest_distance = distance;
+                    closest = p;
+                }
+                else if (distance < smallest_distance){
+                    smallest_distance = distance;
+                    closest = p;
+                }
+            }
+            wolf.setOwner(closest);
+        }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent pje){
+        String player = pje.getPlayer().getName();
+        //if (!exp_db_list.containsKey(player)){
+        //    exp_db_list.put(player, false);
+       // }
+            File player_file = new File(data_folder, player+"data.yml");
+            if (!player_file.exists()) {
+                try {
+                    player_file.createNewFile();
+                    FileConfiguration player_data = YamlConfiguration.loadConfiguration(player_file);
+
+                    //Create new player data
+                    //for (String profession_ID : profession_list.getKeys(false)) {
+                        //Set profession level to 0
+                        //player_data.set(profession_ID, 0);
+                    //}
+                    //player_data.set("SkillPoints", 0);
+
+                    saveData(player_file, player_data);
+
+                    try {
+                        if (player_file != null) {
+                            player_data.save(player_file);
+                        }
+                    } catch (IOException e) {
+                        Bukkit.getServer().getLogger().severe(ChatColor.RED + "Could not save data.yml!");
+                    }
+                } catch (IOException e) {
+                    Bukkit.getServer().getLogger().severe(ChatColor.RED + "Could not create playerdata.yml!");
+                }
+            }
+            else{
+                FileConfiguration player_data = YamlConfiguration.loadConfiguration(player_file);
+               // for (String profession_ID : profession_list.getKeys(false)){
+               //     if (player_data.get(profession_ID) == null) {
+                 //       player_data.set(profession_ID, 0);
+                //    }
+               // }
+                saveData(player_file, player_data);
+            }
+    }
+
+    public void saveData(File player_file, FileConfiguration player_data){
+        try {
+            if (player_file != null){
+                player_data.save(player_file);
+            }
+        }
+        catch (IOException e) {
+            Bukkit.getServer().getLogger().severe(ChatColor.RED + "Could not save data.yml!");
+        }
+    }
+
+    @Override
+    public void onDisable() {
+        saveConfig();
+    }
+
+}

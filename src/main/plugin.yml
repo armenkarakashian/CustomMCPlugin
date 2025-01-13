@@ -1,0 +1,35 @@
+name: CustomGehrinPlugin
+version: '${project.version}'
+main: com.armen_.customgehrinplugin.CustomGehrinPlugin
+api-version: 1.17
+authors: [ armen_ ]
+description: Custom plugin for Gehrin
+commands:
+   latitude:
+      description: Check your current latitude
+      usage: /<command>
+      permission:
+   date:
+      description: Check the current date (DAY MONTH YEAR)
+      usage: /<command>
+      permission:
+   temperature:
+      description: Check the temperature of the block you are standing on
+      usage: /<command>
+      permission:
+   setprofession:
+      description: Set your profession (can only do once)
+      usage: /<command>
+      permission:
+   profession:
+      description: Check your job
+      usage: /<command>
+      permission:
+   addwarmingfactor:
+      description:
+      usage: /<command>
+      permission: customgehrinplugin.admin
+   getwarmingfactor:
+      description:
+      usage: /<command>
+      permission: customgehrinplugin.admin
